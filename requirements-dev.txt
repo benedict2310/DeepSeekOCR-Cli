@@ -1,0 +1,22 @@
+# Development dependencies for DeepSeek-OCR Mac CLI
+# Install with: pip install -r requirements-dev.txt
+
+# Include base requirements
+-r requirements.txt
+
+# Testing frameworks
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+
+# Code quality and linting
+black>=23.7.0
+ruff>=0.0.285
+mypy>=1.5.0
+
+# Type stubs
+types-Pillow>=10.0.0
+
+# Development utilities
+ipython>=8.14.0
+ipdb>=0.13.13

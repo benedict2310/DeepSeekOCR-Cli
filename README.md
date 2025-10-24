@@ -1,5 +1,10 @@
 # DeepSeek-OCR Mac CLI
 
+[![CI/CD Pipeline](https://github.com/benedict2310/DeepSeekOCR-Cli/actions/workflows/ci.yml/badge.svg)](https://github.com/benedict2310/DeepSeekOCR-Cli/actions/workflows/ci.yml)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Offline OCR for images and PDFs using DeepSeek-OCR on macOS (Apple Silicon).
 
 ## Overview
@@ -214,14 +219,115 @@ For large PDFs, process in smaller batches or reduce resolution:
 
 ```
 DeepSeekOCR-Cli/
-├── deepseek_ocr_mac.py    # Main CLI script
-├── requirements.txt        # Python dependencies
-├── README.md              # This file
-├── .gitignore            # Git ignore rules
-└── outputs/              # Default output directory (created at runtime)
+├── deepseek_ocr_mac.py       # Main CLI script
+├── requirements.txt           # Python dependencies
+├── requirements-dev.txt       # Development dependencies
+├── pyproject.toml            # Project configuration
+├── pytest.ini                # Pytest configuration
+├── setup.sh                  # Automated setup script
+├── README.md                 # This file
+├── PRD.md                    # Product requirements document
+├── .gitignore               # Git ignore rules
+├── .github/
+│   └── workflows/
+│       └── ci.yml           # GitHub Actions CI/CD
+├── tests/
+│   ├── __init__.py
+│   ├── fixtures.py          # Test fixtures and utilities
+│   ├── test_unit.py         # Unit tests
+│   └── test_integration.py  # Integration tests
+└── outputs/                 # Default output directory (created at runtime)
+```
+
+### Setting Up Development Environment
+
+```bash
+# Clone and enter repository
+git clone https://github.com/benedict2310/DeepSeekOCR-Cli.git
+cd DeepSeekOCR-Cli
+
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# Install development dependencies
+pip install -r requirements-dev.txt
 ```
 
 ### Running Tests
+
+The project includes comprehensive unit and integration tests with mocked model dependencies to avoid downloading the large DeepSeek-OCR model during testing.
+
+**Run all tests:**
+```bash
+pytest
+```
+
+**Run specific test files:**
+```bash
+# Unit tests only
+pytest tests/test_unit.py -v
+
+# Integration tests only
+pytest tests/test_integration.py -v
+```
+
+**Run tests with coverage:**
+```bash
+pytest --cov=. --cov-report=html --cov-report=term
+```
+
+**Run tests by marker:**
+```bash
+pytest -m unit        # Unit tests only
+pytest -m integration # Integration tests only
+```
+
+### Code Quality Checks
+
+**Format code with Black:**
+```bash
+black .
+```
+
+**Check formatting:**
+```bash
+black --check --diff .
+```
+
+**Lint with Ruff:**
+```bash
+ruff check .
+```
+
+**Auto-fix linting issues:**
+```bash
+ruff check --fix .
+```
+
+**Type checking with MyPy:**
+```bash
+mypy deepseek_ocr_mac.py --ignore-missing-imports
+```
+
+### Continuous Integration
+
+The project uses GitHub Actions for automated testing and quality checks on every push and pull request.
+
+**CI Pipeline includes:**
+- ✅ Code formatting checks (Black)
+- ✅ Linting (Ruff)
+- ✅ Type checking (MyPy)
+- ✅ Unit tests (Python 3.9-3.12)
+- ✅ Integration tests (Ubuntu & macOS)
+- ✅ Coverage reporting (Codecov)
+- ✅ Security scanning (Bandit, Safety)
+- ✅ CLI integration tests
+
+**View CI status:**
+Check the Actions tab on GitHub after pushing changes.
+
+### Manual Testing
 
 ```bash
 # Test with sample image
@@ -232,6 +338,14 @@ DeepSeekOCR-Cli/
 
 # Verify MPS acceleration
 python3 -c "import torch; print(f'MPS available: {torch.backends.mps.is_available()}')"
+
+# Create test fixtures
+python3 -c "
+from tests.fixtures import create_test_image, create_test_pdf
+from pathlib import Path
+create_test_image(Path('test.png'), 'Sample Text')
+create_test_pdf(Path('test.pdf'), num_pages=3)
+"
 ```
 
 ## Future Enhancements
