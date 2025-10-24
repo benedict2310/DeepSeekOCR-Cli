@@ -1,0 +1,15 @@
+[bandit]
+# Bandit configuration for DeepSeek-OCR Mac CLI
+
+# Exclude test directories from certain checks
+exclude_dirs = []
+
+# Skip certain tests
+skips = B101,B601
+
+# B101: Use of assert - acceptable in test files
+# B601: Paramiko exec_command usage - not applicable
+
+[bandit.assert_used]
+# Allow assert statements in test files
+skips = */tests/*

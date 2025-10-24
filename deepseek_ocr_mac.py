@@ -3,17 +3,15 @@
 DeepSeek-OCR Mac CLI
 Offline OCR for PDFs and images using DeepSeek-OCR on macOS (Apple Silicon)
 """
-import os
-import sys
 import argparse
-import tempfile
 import shutil
+import sys
+import tempfile
 from glob import glob
 from pathlib import Path
 
 import torch
-from PIL import Image
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoModel, AutoTokenizer
 
 try:
     import fitz  # PyMuPDF
@@ -22,18 +20,22 @@ except Exception:
 
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
+
 def is_image(path: Path):
     """Check if file is a supported image format."""
     return path.suffix.lower() in IMG_EXTS
+
 
 def is_pdf(path: Path):
     """Check if file is a PDF."""
     return path.suffix.lower() == ".pdf"
 
+
 def ensure_dir(p: Path):
     """Create directory if it doesn't exist."""
     p.mkdir(parents=True, exist_ok=True)
     return p
+
 
 def render_pdf_to_images(pdf_path: Path, out_dir: Path, scale: float):
     """
@@ -63,6 +65,7 @@ def render_pdf_to_images(pdf_path: Path, out_dir: Path, scale: float):
 
     doc.close()
     return out_files
+
 
 def run_infer(model, tok, image_path, out_dir, base_size, image_size, crop_mode, test_compress):
     """
@@ -94,6 +97,7 @@ def run_infer(model, tok, image_path, out_dir, base_size, image_size, crop_mode,
         test_compress=test_compress,
     )
     return res.get("text", "")
+
 
 def collect_targets(target: Path, dpi: int, tmp_dir: Path):
     """
@@ -131,6 +135,7 @@ def collect_targets(target: Path, dpi: int, tmp_dir: Path):
     print(f"ERROR: Unsupported target: {target}")
     sys.exit(3)
 
+
 def main():
     """Main CLI entrypoint."""
     ap = argparse.ArgumentParser(
@@ -143,11 +148,15 @@ Examples:
   %(prog)s ./scans                       # Process directory
   %(prog)s file.pdf --dpi 360            # High quality
   %(prog)s file.pdf --no-crop            # Disable auto-crop
-        """
+        """,
     )
     ap.add_argument("path", help="File or folder (image/pdf or dir)")
     ap.add_argument("-o", "--out", default="outputs", help="Output directory (default: outputs)")
-    ap.add_argument("--model", default="deepseek-ai/DeepSeek-OCR", help="Model name (default: deepseek-ai/DeepSeek-OCR)")
+    ap.add_argument(
+        "--model",
+        default="deepseek-ai/DeepSeek-OCR",
+        help="Model name (default: deepseek-ai/DeepSeek-OCR)",
+    )
     ap.add_argument("--base-size", type=int, default=1024, help="Base resolution (default: 1024)")
     ap.add_argument("--image-size", type=int, default=640, help="Target image size (default: 640)")
     ap.add_argument("--no-crop", action="store_true", help="Disable intelligent cropping")
@@ -171,12 +180,17 @@ Examples:
     # Load model and tokenizer
     print("Loading model…")
     try:
-        tok = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
-        model = AutoModel.from_pretrained(
-            args.model,
-            trust_remote_code=True,
-            use_safetensors=True
-        ).to(device).eval()
+        # Note: trust_remote_code=True is required for DeepSeek-OCR's custom model code
+        # This is safe when loading from the official deepseek-ai/DeepSeek-OCR repository
+        # Users can verify the model source before loading
+        tok = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)  # nosec B615
+        model = (
+            AutoModel.from_pretrained(
+                args.model, trust_remote_code=True, use_safetensors=True  # nosec B615
+            )
+            .to(device)
+            .eval()
+        )
     except Exception as e:
         print(f"ERROR loading model: {e}")
         sys.exit(5)
@@ -199,11 +213,14 @@ Examples:
         for idx, f in enumerate(files, start=1):
             print(f"→ OCR [{idx}/{len(files)}] {f.name}")
             text = run_infer(
-                model, tok, f, out_dir,
+                model,
+                tok,
+                f,
+                out_dir,
                 base_size=args.base_size,
                 image_size=args.image_size,
                 crop_mode=not args.no_crop,
-                test_compress=not args.no_compress
+                test_compress=not args.no_compress,
             )
             results.append(f"# {f.name}\n\n{text}\n")
 
@@ -217,11 +234,13 @@ Examples:
     except Exception as e:
         print(f"\nERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(6)
     finally:
         # Clean up temporary files
         shutil.rmtree(tmp_root, ignore_errors=True)
+
 
 if __name__ == "__main__":
     main()

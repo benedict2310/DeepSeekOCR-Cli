@@ -55,3 +55,13 @@ tmp_*/
 test_images/
 test_pdfs/
 samples/
+
+# Code quality and coverage reports
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+bandit-report.json

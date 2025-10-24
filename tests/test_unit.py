@@ -1,20 +1,17 @@
 """
 Unit tests for DeepSeek-OCR Mac CLI helper functions.
 """
+
 import sys
 import tempfile
 from pathlib import Path
+
 import pytest
 
 # Add parent directory to path to import the module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from deepseek_ocr_mac import (
-    is_image,
-    is_pdf,
-    ensure_dir,
-    IMG_EXTS
-)
+from deepseek_ocr_mac import IMG_EXTS, ensure_dir, is_image, is_pdf
 from tests.fixtures import create_test_image, create_test_pdf
 
 
@@ -107,7 +104,7 @@ class TestPDFRendering:
 
         assert len(images) == 2
         assert all(img.exists() for img in images)
-        assert all(img.suffix == '.png' for img in images)
+        assert all(img.suffix == ".png" for img in images)
 
     def test_render_pdf_to_images_naming(self, tmp_path):
         """Test that rendered images have correct naming."""
@@ -131,8 +128,9 @@ class TestPDFRendering:
         """Test that scaling parameter affects output."""
         pytest.importorskip("fitz")
 
-        from deepseek_ocr_mac import render_pdf_to_images
         from PIL import Image
+
+        from deepseek_ocr_mac import render_pdf_to_images
 
         pdf_path = tmp_path / "test.pdf"
         create_test_pdf(pdf_path, num_pages=1)
@@ -203,7 +201,7 @@ class TestCollectTargets:
         targets = collect_targets(pdf_path, dpi=288, tmp_dir=tmp_dir)
 
         assert len(targets) == 2
-        assert all(t.suffix == '.png' for t in targets)
+        assert all(t.suffix == ".png" for t in targets)
 
 
 if __name__ == "__main__":
