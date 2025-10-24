@@ -1,0 +1,23 @@
+# DeepSeek-OCR Mac CLI Dependencies
+# Python 3.9+ required
+# Optimized for macOS (Apple Silicon M1-M4)
+
+# Core ML/AI frameworks
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+transformers>=4.46.0
+
+# DeepSeek-OCR specific dependencies
+einops>=0.7.0
+addict>=2.4.0
+easydict>=1.10
+
+# Image processing
+Pillow>=10.0.0
+
+# PDF handling
+PyMuPDF>=1.23.0
+
+# Utilities
+tqdm>=4.65.0
