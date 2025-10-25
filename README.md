@@ -176,6 +176,31 @@ Markdown Output → outputs/merged_output.md
 - **Device:** MPS (Metal) if available, else CPU
 - **Core Dependencies:** torch, transformers, pillow, pymupdf
 
+## Apple Silicon (MPS) Compatibility
+
+This project includes patches for full Apple Silicon MPS (Metal Performance Shaders) support. The original DeepSeek-OCR model was designed for CUDA, but we've implemented the following fixes to enable native macOS acceleration:
+
+### MPS Patches Applied
+
+1. **Attention Implementation**: Uses `eager` attention instead of `flash_attention_2` (MPS doesn't support Flash Attention)
+2. **Data Type Handling**: Converts model to `float32` for MPS compatibility (bfloat16 has partial support)
+3. **Autocast Disabled**: Removes `torch.autocast` on MPS to prevent numerical instability
+4. **Scatter Operation Fix**: Replaces `masked_scatter_` with direct boolean indexing to fix generation loops
+5. **Tokenizer Padding**: Sets right-side padding to avoid known MPS bugs
+
+These patches are based on [HuggingFace Discussion #20](https://huggingface.co/deepseek-ai/DeepSeek-OCR/discussions/20) and enable full functionality on Apple Silicon without requiring CUDA.
+
+### Version Requirements
+
+The following specific versions are required for MPS compatibility:
+
+```
+transformers==4.46.3
+tokenizers==0.20.3
+```
+
+These are pinned in `requirements.txt` and will be installed automatically.
+
 ## Troubleshooting
 
 ### Model Download Issues
@@ -196,6 +221,23 @@ Using device: cpu
 ```
 
 This is normal on Intel Macs. Performance will be slower but functional.
+
+### Incompatible Transformers Version
+
+If you see errors like `cannot import name 'LlamaFlashAttention2'`, you may have the wrong transformers version:
+
+```bash
+# Reinstall with correct versions
+pip install transformers==4.46.3 tokenizers==0.20.3
+```
+
+### Repetitive Output ("Background Background...")
+
+This was a known issue with MPS that has been fixed in this repository. If you still see it:
+
+1. Ensure you're using the latest code from this repo
+2. Verify transformers version is exactly 4.46.3
+3. Check that the model is loading with `attn_implementation="eager"`
 
 ### PyMuPDF Installation Issues
 
@@ -363,6 +405,7 @@ Potential improvements (not yet implemented):
 
 - [DeepSeek-OCR Official Repo](https://github.com/deepseek-ai/DeepSeek-OCR)
 - [Hugging Face Model Hub](https://huggingface.co/deepseek-ai/DeepSeek-OCR)
+- [MPS Backend Support Discussion](https://huggingface.co/deepseek-ai/DeepSeek-OCR/discussions/20) - Critical patches for Apple Silicon
 - [PyTorch MPS Documentation](https://pytorch.org/docs/stable/notes/mps.html)
 - [PyMuPDF Documentation](https://pymupdf.readthedocs.io)
 

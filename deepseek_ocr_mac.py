@@ -184,13 +184,21 @@ Examples:
         # This is safe when loading from the official deepseek-ai/DeepSeek-OCR repository
         # Users can verify the model source before loading
         tok = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)  # nosec B615
-        model = (
-            AutoModel.from_pretrained(
-                args.model, trust_remote_code=True, use_safetensors=True  # nosec B615
-            )
-            .to(device)
-            .eval()
+        # Fix MPS padding issue - right padding avoids known MPS generation bugs
+        tok.padding_side = "right"
+
+        # MPS compatibility: use eager attention (not flash_attention_2) and float32
+        # See: https://huggingface.co/deepseek-ai/DeepSeek-OCR/discussions/20
+        model = AutoModel.from_pretrained(
+            args.model,
+            trust_remote_code=True,  # nosec B615
+            use_safetensors=True,
+            attn_implementation="eager",  # MPS doesn't support flash_attention_2
         )
+        # Convert to float32 for MPS compatibility (bfloat16 causes dtype mismatches)
+        if device == "mps":
+            model = model.float()
+        model = model.to(device).eval()
     except Exception as e:
         print(f"ERROR loading model: {e}")
         sys.exit(5)
