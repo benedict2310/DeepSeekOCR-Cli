@@ -29,6 +29,10 @@ class MockModel:
         """Mock eval() method."""
         return self
 
+    def float(self):
+        """Mock float() method for MPS compatibility."""
+        return self
+
     def infer(self, tokenizer, prompt, image_file, output_path, **kwargs):
         """Mock infer() method that returns fake OCR results."""
         img_name = Path(image_file).name
@@ -38,6 +42,9 @@ class MockModel:
 
 class MockTokenizer:
     """Mock tokenizer for testing."""
+
+    def __init__(self):
+        self.padding_side = "right"
 
     @classmethod
     def from_pretrained(cls, model_name, **kwargs):
@@ -132,7 +139,10 @@ class TestCLIIntegration:
         merged_output = out_dir / "merged_output.md"
         assert merged_output.exists()
         content = merged_output.read_text()
-        assert "# test.png" in content
+        assert "# Page 1" in content
+        assert "OCR Result for test.png" in content
+        assert "quality:" in content  # Check for quality summary
+        assert "success_rate:" in content
 
     def test_main_with_pdf(self, tmp_path, mock_transformers, mock_torch, monkeypatch, capsys):
         """Test main CLI with a PDF file."""
