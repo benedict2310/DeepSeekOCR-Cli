@@ -31,9 +31,13 @@ IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 # Compression presets for different quality/speed trade-offs
 # NOTE: base_size values above 1024 can trigger shape mismatch bugs in DeepSeek-OCR model
 COMPRESSION_PRESETS = {
-    "low": dict(base_size=1024, image_size=640, crop_mode=True, test_compress=False),  # Baseline quality
-    "med": dict(base_size=1024, image_size=640, crop_mode=True, test_compress=True),   # Balanced
-    "high": dict(base_size=896, image_size=512, crop_mode=True, test_compress=True),  # Fast/compressed
+    "low": dict(
+        base_size=1024, image_size=640, crop_mode=True, test_compress=False
+    ),  # Baseline quality
+    "med": dict(base_size=1024, image_size=640, crop_mode=True, test_compress=True),  # Balanced
+    "high": dict(
+        base_size=896, image_size=512, crop_mode=True, test_compress=True
+    ),  # Fast/compressed
 }
 
 # Regular expressions for post-processing
@@ -566,8 +570,12 @@ Examples:
         default="deepseek-ai/DeepSeek-OCR",
         help="Model name (default: deepseek-ai/DeepSeek-OCR)",
     )
-    ap.add_argument("--base-size", type=int, default=None, help="Base resolution (default: from preset)")
-    ap.add_argument("--image-size", type=int, default=None, help="Target image size (default: from preset)")
+    ap.add_argument(
+        "--base-size", type=int, default=None, help="Base resolution (default: from preset)"
+    )
+    ap.add_argument(
+        "--image-size", type=int, default=None, help="Target image size (default: from preset)"
+    )
     ap.add_argument("--no-crop", action="store_true", help="Disable intelligent cropping")
     ap.add_argument("--no-compress", action="store_true", help="Disable compression")
     ap.add_argument("--dpi", type=int, default=288, help="DPI for PDF rendering (default: 288)")
