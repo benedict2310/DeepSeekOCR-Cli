@@ -48,6 +48,7 @@ examples/
 *.pdf.text
 temp_*/
 tmp_*/
+CLAUDE.md
 
 # Model cache (optional - uncomment to ignore cached models)
 # .cache/
