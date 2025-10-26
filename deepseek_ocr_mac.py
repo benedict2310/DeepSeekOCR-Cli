@@ -15,7 +15,7 @@ import time
 from dataclasses import dataclass, field
 from glob import glob
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 import torch
 from PIL import Image, ImageDraw, ImageFilter
@@ -31,9 +31,24 @@ IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 # Compression presets for different quality/speed trade-offs
 # NOTE: base_size values above 1024 can trigger shape mismatch bugs in DeepSeek-OCR model
 COMPRESSION_PRESETS = {
-    "low": dict(base_size=1024, image_size=640, crop_mode=True, test_compress=False),  # Baseline quality
-    "med": dict(base_size=1024, image_size=640, crop_mode=True, test_compress=True),   # Balanced
-    "high": dict(base_size=896, image_size=512, crop_mode=True, test_compress=True),  # Fast/compressed
+    "low": {
+        "base_size": 1024,
+        "image_size": 640,
+        "crop_mode": True,
+        "test_compress": False,
+    },  # Baseline quality
+    "med": {
+        "base_size": 1024,
+        "image_size": 640,
+        "crop_mode": True,
+        "test_compress": True,
+    },  # Balanced
+    "high": {
+        "base_size": 896,
+        "image_size": 512,
+        "crop_mode": True,
+        "test_compress": True,
+    },  # Fast/compressed
 }
 
 # Regular expressions for post-processing
@@ -61,7 +76,7 @@ class ProcessingStats:
     """Statistics for a processing run."""
 
     total_pages: int = 0
-    failed_pages: List[int] = field(default_factory=list)
+    failed_pages: list[int] = field(default_factory=list)
     total_words: int = 0
     compression: str = "low"
     workers: int = 1
@@ -97,7 +112,7 @@ def ensure_dir(p: Path):
     return p
 
 
-def build_prompt(mode: str = "markdown", extras: Optional[List[str]] = None) -> str:
+def build_prompt(mode: str = "markdown", extras: Optional[list[str]] = None) -> str:
     """
     Build a prompt for the OCR model with optional extras.
 
@@ -121,7 +136,7 @@ def word_count(text: str) -> int:
     return len(re.findall(r"\w+", text))
 
 
-def md_table_to_rows(md_table: str) -> List[List[str]]:
+def md_table_to_rows(md_table: str) -> list[list[str]]:
     """
     Convert a Markdown table to a list of row lists.
 
@@ -141,7 +156,7 @@ def md_table_to_rows(md_table: str) -> List[List[str]]:
 
 def extract_tables_to_csv(
     page_text: str, out_dir: Path, page_idx: int, fmt: str = "csv"
-) -> List[Path]:
+) -> list[Path]:
     """
     Extract Markdown tables to CSV/TSV files.
 
@@ -172,7 +187,7 @@ def extract_tables_to_csv(
     return created_files
 
 
-def extract_math(page_text: str, out_dir: Path, page_idx: int) -> List[Path]:
+def extract_math(page_text: str, out_dir: Path, page_idx: int) -> list[Path]:
     """
     Extract LaTeX math expressions to .tex files.
 
@@ -250,7 +265,7 @@ def tag_code_languages(page_text: str) -> str:
     return CODE_FENCE_RE.sub(replace_fence, page_text)
 
 
-def extract_chart_data(page_text: str, out_dir: Path, page_idx: int) -> List[Path]:
+def extract_chart_data(page_text: str, out_dir: Path, page_idx: int) -> list[Path]:
     """
     (Experimental) Extract chart data to CSV files.
 
@@ -566,8 +581,12 @@ Examples:
         default="deepseek-ai/DeepSeek-OCR",
         help="Model name (default: deepseek-ai/DeepSeek-OCR)",
     )
-    ap.add_argument("--base-size", type=int, default=None, help="Base resolution (default: from preset)")
-    ap.add_argument("--image-size", type=int, default=None, help="Target image size (default: from preset)")
+    ap.add_argument(
+        "--base-size", type=int, default=None, help="Base resolution (default: from preset)"
+    )
+    ap.add_argument(
+        "--image-size", type=int, default=None, help="Target image size (default: from preset)"
+    )
     ap.add_argument("--no-crop", action="store_true", help="Disable intelligent cropping")
     ap.add_argument("--no-compress", action="store_true", help="Disable compression")
     ap.add_argument("--dpi", type=int, default=288, help="DPI for PDF rendering (default: 288)")
