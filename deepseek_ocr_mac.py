@@ -512,7 +512,7 @@ def run_infer(
         base_size=base_size,
         image_size=image_size,
         crop_mode=crop_mode,
-        save_results=True,
+        save_results=True,  # Required for model to return results
         test_compress=test_compress,
     )
     # Handle None return from model.infer() when errors occur
@@ -796,6 +796,12 @@ quality:
         # Write merged output with quality summary
         merged_content = "\n".join(page_md_sections) + "\n" + quality_summary
         merged_path.write_text(merged_content, encoding="utf-8")
+
+        # Clean up model-generated temporary files
+        for temp_file in ["result.mmd", "result_with_boxes.jpg"]:
+            temp_path = out_dir / temp_file
+            if temp_path.exists():
+                temp_path.unlink()
 
         print(f"\n✅ Done! Markdown saved to {merged_path.resolve()}")
         print(f"   Processed: {stats.total_pages} pages in {stats.processing_time:.2f}s")
