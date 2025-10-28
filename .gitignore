@@ -40,7 +40,6 @@ env/
 
 # Project specific
 outputs/
-examples/
 .project-docs/
 *.png.text
 *.jpg.text
