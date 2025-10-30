@@ -1,0 +1,211 @@
+# visual_index.py
+"""Visual embeddings extraction and HNSW indexing for DeepSeek-OCR."""
+from __future__ import annotations
+
+import json
+import numpy as np
+import torch
+from pathlib import Path
+from typing import List, Tuple
+import hnswlib
+
+from transformers import AutoModel, AutoTokenizer, AutoProcessor
+
+
+class DeepSeekVisionEmbedder:
+    """Extracts vision embeddings from DeepSeek-OCR model."""
+
+    def __init__(self, model_id="deepseek-ai/DeepSeek-OCR", device=None, dtype=torch.float32):
+        """
+        Initialize the vision embedder.
+
+        Args:
+            model_id: HuggingFace model identifier
+            device: Device to use (mps, cuda, or cpu)
+            dtype: Data type for model weights
+        """
+        self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+        self.tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+        try:
+            self.proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+        except Exception:
+            self.proc = None
+        self.model = AutoModel.from_pretrained(
+            model_id,
+            trust_remote_code=True,
+            attn_implementation="eager",
+            torch_dtype=dtype,
+        ).to(self.device).eval()
+
+    def _preprocess(self, pil_image):
+        """
+        Preprocess PIL image for model input.
+
+        Args:
+            pil_image: PIL Image object
+
+        Returns:
+            Dictionary with preprocessed inputs
+        """
+        if self.proc:
+            inputs = self.proc(text="<image>\n", images=pil_image, return_tensors="pt")
+            for k, v in list(inputs.items()):
+                if isinstance(v, torch.Tensor):
+                    inputs[k] = v.to(self.device)
+            return inputs
+
+        # Simple fallback without processor
+        import numpy as np
+
+        img = pil_image.convert("RGB")
+        w, h = img.size
+        s = 1024 / max(w, h)
+        img = img.resize((int(w * s), int(h * s)))
+        t = torch.from_numpy(np.array(img)).permute(2, 0, 1).unsqueeze(0) / 255.0
+        ids = self.tok("<image>\n", return_tensors="pt").input_ids
+        return {"images": t.to(self.device), "input_ids": ids.to(self.device)}
+
+    def embed_image(self, pil_image) -> np.ndarray:
+        """
+        Extract vision embedding from PIL image.
+
+        Args:
+            pil_image: PIL Image object
+
+        Returns:
+            Normalized embedding vector as numpy array
+        """
+        x = self._preprocess(pil_image)
+        with torch.no_grad():
+            if hasattr(self.model, "get_image_features"):
+                feats = self.model.get_image_features(
+                    **{k: v for k, v in x.items() if k in ("images", "pixel_values")}
+                )
+                vec = feats if isinstance(feats, torch.Tensor) else feats[0]
+                if vec.ndim == 3:
+                    vec = vec.mean(1)
+            else:
+                out = self.model(**x, output_hidden_states=True, return_dict=True)
+                # Try vision_outputs first
+                if hasattr(out, "vision_outputs") and out.vision_outputs is not None:
+                    hs = out.vision_outputs.last_hidden_state  # [B,T,D]
+                    vec = hs.mean(1)
+                elif hasattr(out, "hidden_states") and out.hidden_states is not None:
+                    hs = out.hidden_states[-1][0]  # [seq,D] mixed stream
+                    mask = x.get("images_seq_mask", None)  # if provided by processor
+                    if isinstance(mask, torch.Tensor) and mask.numel():
+                        vs = hs[mask[0].to(torch.bool)]
+                        vec = vs.mean(0) if vs.numel() else hs.mean(0)
+                    else:
+                        vec = hs.mean(0)
+                else:
+                    vision = getattr(self.model, "vision", None) or getattr(
+                        self.model, "vision_model", None
+                    )
+                    pv = x.get("images") or x.get("pixel_values")
+                    vout = vision(pixel_values=pv)
+                    hs = getattr(vout, "last_hidden_state", None)
+                    if hs is None:
+                        raise RuntimeError("No vision last_hidden_state")
+                    vec = hs.mean(1)
+
+            vec = torch.nn.functional.normalize(vec, dim=-1)
+            return vec.squeeze().detach().cpu().numpy().astype(np.float32)
+
+
+class VisualIndex:
+    """HNSW index for visual embeddings with metadata storage."""
+
+    def __init__(self, space="cosine", dim=None):
+        """
+        Initialize visual index.
+
+        Args:
+            space: Distance metric (cosine, l2, ip)
+            dim: Embedding dimension (auto-detected on build)
+        """
+        self.space = space
+        self.dim = dim
+        self.index = None
+        self.meta = []  # list of dicts: {id, doc_id, page_id, display}
+
+    def build(self, X: np.ndarray, meta: list, M=32, efC=200):
+        """
+        Build index from embeddings and metadata.
+
+        Args:
+            X: Embeddings matrix [N, D]
+            meta: List of metadata dictionaries
+            M: HNSW M parameter (connections per node)
+            efC: HNSW ef_construction parameter
+        """
+        self.dim = X.shape[1]
+        self.index = hnswlib.Index(space=self.space, dim=self.dim)
+        self.index.init_index(max_elements=len(X), ef_construction=efC, M=M)
+        self.index.add_items(X, ids=np.arange(len(X)))
+        self.index.set_ef(64)
+        self.meta = meta
+
+    def resize(self, new_max):
+        """
+        Resize index to accommodate more elements.
+
+        Args:
+            new_max: New maximum number of elements
+        """
+        self.index.resize_index(new_max)
+
+    def add(self, X: np.ndarray, meta: list):
+        """
+        Add new embeddings to existing index.
+
+        Args:
+            X: Embeddings matrix [N, D]
+            meta: List of metadata dictionaries
+        """
+        start = len(self.meta)
+        ids = np.arange(start, start + len(meta))
+        self.index.add_items(X, ids=ids)
+        self.meta.extend(meta)
+
+    def save(self, folder: Path):
+        """
+        Save index and metadata to disk.
+
+        Args:
+            folder: Directory to save index files
+        """
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "dim.txt").write_text(str(self.dim), encoding="utf-8")
+        self.index.save_index(str(folder / "hnsw.bin"))
+        (folder / "meta.json").write_text(
+            json.dumps(self.meta, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+
+    def load(self, folder: Path):
+        """
+        Load index and metadata from disk.
+
+        Args:
+            folder: Directory containing index files
+        """
+        self.dim = int((folder / "dim.txt").read_text().strip())
+        self.index = hnswlib.Index(space=self.space, dim=self.dim)
+        self.index.load_index(str(folder / "hnsw.bin"))
+        self.index.set_ef(64)
+        self.meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+
+    def query(self, vec: np.ndarray, topk=5):
+        """
+        Query index for similar vectors.
+
+        Args:
+            vec: Query vector
+            topk: Number of results to return
+
+        Returns:
+            List of (metadata, similarity_score) tuples
+        """
+        lbl, dist = self.index.knn_query(vec.reshape(1, -1).astype(np.float32), k=topk)
+        sims = 1.0 - dist[0]
+        return [(self.meta[int(i)], float(s)) for i, s in zip(lbl[0], sims)]
