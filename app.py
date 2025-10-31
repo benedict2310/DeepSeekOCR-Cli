@@ -271,7 +271,9 @@ def search_text(q: str = Form(...), topk: int = Form(5)):
 
     try:
         qv = st.encode([q], normalize_embeddings=True)[0].astype(np.float32)
-        res = tidx.query(qv, k=topk)
+        # Guard against requesting more results than available in index
+        k = min(topk, len(tidx.docs)) if tidx.docs else topk
+        res = tidx.query(qv, k=k)
         return JSONResponse(
             [{"name": d["name"], "path": d.get("path", ""), "score": s} for d, s in res]
         )
@@ -297,7 +299,9 @@ async def search_image(file: UploadFile = File(...), topk: int = Form(5)):
     try:
         img = Image.open(io.BytesIO(await file.read())).convert("RGB")
         qv = embedder.embed_image(img)
-        res = vi.query(qv, topk=topk)
+        # Guard against requesting more results than available in index
+        k = min(topk, len(vi.meta)) if vi.meta else topk
+        res = vi.query(qv, topk=k)
         return JSONResponse([{"display": m["display"], "score": s} for m, s in res])
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)

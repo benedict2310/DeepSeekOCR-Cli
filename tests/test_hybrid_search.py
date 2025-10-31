@@ -420,3 +420,55 @@ class TestIndexPersistence:
         assert len(tindex3.docs) == 5
         assert tindex3.docs[0]["name"] == "batch1_doc_0"
         assert tindex3.docs[3]["name"] == "batch2_doc_0"
+
+
+class TestSmallIndexQueries:
+    """Test that indexes handle k > size gracefully."""
+
+    def test_text_index_query_exceeds_size(self):
+        """Test querying TextIndex with k larger than index size."""
+        # Create tiny index with only 3 documents
+        n_docs = 3
+        dim = 384
+        X = np.random.randn(n_docs, dim).astype(np.float32)
+        X = X / np.linalg.norm(X, axis=1, keepdims=True)
+
+        docs = [{"path": f"/docs/{i}.md", "name": f"doc_{i}"} for i in range(n_docs)]
+
+        tindex = TextIndex(space="cosine")
+        tindex.build(X, docs)
+
+        # Query with k clamped to index size (guards in endpoints do this)
+        qv = np.random.randn(dim).astype(np.float32)
+        qv = qv / np.linalg.norm(qv)
+
+        k = min(10, len(tindex.docs))  # Should be 3
+        results = tindex.query(qv, k=k)
+
+        # Should return all 3 documents without error
+        assert len(results) == 3
+        assert all(isinstance(r, tuple) and len(r) == 2 for r in results)
+
+    def test_visual_index_query_exceeds_size(self):
+        """Test querying VisualIndex with k larger than index size."""
+        # Create tiny index with only 2 entries
+        n_entries = 2
+        dim = 64
+        X = np.random.randn(n_entries, dim).astype(np.float32)
+        X = X / np.linalg.norm(X, axis=1, keepdims=True)
+
+        meta = [{"id": i, "display": f"page_{i}.png"} for i in range(n_entries)]
+
+        vindex = VisualIndex(space="cosine")
+        vindex.build(X, meta)
+
+        # Query with k clamped to index size (guards in endpoints do this)
+        qv = np.random.randn(dim).astype(np.float32)
+        qv = qv / np.linalg.norm(qv)
+
+        k = min(50, len(vindex.meta))  # Should be 2
+        results = vindex.query(qv, topk=k)
+
+        # Should return all 2 entries without error
+        assert len(results) == 2
+        assert all(isinstance(r, tuple) and len(r) == 2 for r in results)
