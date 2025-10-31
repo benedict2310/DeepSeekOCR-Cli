@@ -28,8 +28,9 @@ except Exception:
 
 # Import hybrid search modules
 try:
-    from visual_index import DeepSeekVisionEmbedder, VisualIndex
     from hybrid_search import TextIndex, load_st_model
+    from visual_index import DeepSeekVisionEmbedder, VisualIndex
+
     HYBRID_SEARCH_AVAILABLE = True
 except ImportError:
     HYBRID_SEARCH_AVAILABLE = False
@@ -869,7 +870,7 @@ Examples:
 
                 st = load_st_model(args.text_embed_model)
                 docs, X = [], []
-                for img, txt, disp in page_records:
+                for _img, txt, disp in page_records:
                     emb = st.encode([txt], normalize_embeddings=True)[0].astype(np.float32)
                     X.append(emb)
                     docs.append({"path": str(merged_path.resolve()), "name": disp})

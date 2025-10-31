@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
 import hnswlib
 import numpy as np
-from pathlib import Path
 
 
 def load_st_model(name="sentence-transformers/all-MiniLM-L6-v2"):
@@ -171,7 +172,7 @@ def hybrid_search(
 
     # Combine scores
     combined = []
-    for key, data in results.items():
+    for _key, data in results.items():
         combined_score = alpha * data["text_score"] + (1 - alpha) * data["visual_score"]
         combined.append((data["doc"], combined_score))
 

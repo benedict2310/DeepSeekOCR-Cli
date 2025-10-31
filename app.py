@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """FastAPI web demo for DeepSeek-OCR hybrid search."""
-from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, JSONResponse
-from pathlib import Path
-from PIL import Image
 import io
-import numpy as np
-import sys
+from pathlib import Path
 
-from visual_index import VisualIndex, DeepSeekVisionEmbedder
+import numpy as np
+from fastapi import FastAPI, File, Form, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse
+from PIL import Image
+
 from hybrid_search import TextIndex, load_st_model
+from visual_index import DeepSeekVisionEmbedder, VisualIndex
 
 # Configuration
 VI_DIR = Path("./vi_index")

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import hnswlib
 import numpy as np
 import torch
-from pathlib import Path
-from typing import List, Tuple
-import hnswlib
-
-from transformers import AutoModel, AutoTokenizer, AutoProcessor
+from transformers import AutoModel, AutoProcessor, AutoTokenizer
 
 
 class DeepSeekVisionEmbedder:

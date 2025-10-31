@@ -17,8 +17,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 pytest.importorskip("hnswlib")
 pytest.importorskip("sentence_transformers")
 
+from hybrid_search import TextIndex, hybrid_search, load_st_model
 from visual_index import DeepSeekVisionEmbedder, VisualIndex
-from hybrid_search import TextIndex, load_st_model, hybrid_search
 
 
 class TestVisualIndex:
