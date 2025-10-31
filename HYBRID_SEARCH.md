@@ -259,8 +259,49 @@ class TextIndex:
 
 ```python
 class DeepSeekVisionEmbedder:
-    def __init__(self, model_id="deepseek-ai/DeepSeek-OCR", device=None, dtype=torch.float32)
+    def __init__(
+        self,
+        model_id="deepseek-ai/DeepSeek-OCR",
+        device=None,
+        dtype=torch.float32,
+        model=None,
+        tokenizer=None
+    )
     def embed_image(self, pil_image) -> np.ndarray
+```
+
+### `hybrid_search`
+
+```python
+def hybrid_search(
+    query: str,
+    text_index: TextIndex,
+    visual_index=None,
+    query_image=None,
+    text_model=None,
+    visual_embedder=None,  # IMPORTANT: Pass pre-loaded embedder to avoid OOM!
+    alpha=0.6,
+    k=5
+) -> List[Tuple[dict, float]]
+```
+
+**⚠️ Performance Warning:** Always pass a pre-loaded `visual_embedder` when calling `hybrid_search` in production. Creating an embedder inside the function will reload the multi-GB DeepSeek-OCR model on every query, causing severe memory and performance issues.
+
+**Example (Correct Usage):**
+```python
+# Load embedder once (at startup)
+embedder = DeepSeekVisionEmbedder("deepseek-ai/DeepSeek-OCR")
+
+# Reuse for all queries
+results = hybrid_search(
+    query="search query",
+    text_index=tidx,
+    visual_index=vi,
+    query_image=img,
+    text_model=st,
+    visual_embedder=embedder,  # ✅ Reuse pre-loaded model
+    k=5
+)
 ```
 
 ## FastAPI Endpoints

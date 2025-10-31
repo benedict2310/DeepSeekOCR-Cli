@@ -128,6 +128,7 @@ def hybrid_search(
     visual_index=None,
     query_image=None,
     text_model=None,
+    visual_embedder=None,
     alpha=0.6,
     k=5,
 ):
@@ -140,6 +141,7 @@ def hybrid_search(
         visual_index: Optional VisualIndex instance
         query_image: Optional PIL image for visual search
         text_model: SentenceTransformer model for text embeddings
+        visual_embedder: Optional pre-loaded DeepSeekVisionEmbedder (for reuse)
         alpha: Weight for text scores (1-alpha for visual scores)
         k: Number of results to return
 
@@ -160,10 +162,14 @@ def hybrid_search(
 
     # Visual search
     if query_image and visual_index:
-        from visual_index import DeepSeekVisionEmbedder
+        # Use pre-loaded embedder if provided, otherwise create one
+        # WARNING: Creating embedder here will reload model on every query
+        if visual_embedder is None:
+            from visual_index import DeepSeekVisionEmbedder
 
-        embedder = DeepSeekVisionEmbedder()
-        qv = embedder.embed_image(query_image)
+            visual_embedder = DeepSeekVisionEmbedder()
+
+        qv = visual_embedder.embed_image(query_image)
         # Guard against small indexes: clamp k*2 to actual index size
         visual_k = min(k * 2, len(visual_index.meta)) if visual_index.meta else k
         visual_results = visual_index.query(qv, topk=visual_k)
