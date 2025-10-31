@@ -828,7 +828,10 @@ Examples:
             if args.visual_index:
                 vi_dir = Path(args.visual_index).resolve()
                 print(f"\n[index] Updating visual index in {vi_dir} ...")
-                embedder = DeepSeekVisionEmbedder(args.model, dtype=torch.float32)
+                # Reuse existing model and tokenizer to avoid OOM on Apple Silicon
+                embedder = DeepSeekVisionEmbedder(
+                    args.model, dtype=torch.float32, model=model, tokenizer=tok
+                )
 
                 # Build or load visual index
                 vindex = VisualIndex(space="cosine")
@@ -854,10 +857,8 @@ Examples:
                 vindex.save(vi_dir)
                 print(f"[index] Visual index now has {len(vindex.meta)} entries")
 
-                # Clean up embedder to free memory
+                # Clean up embedder reference (model is still held by outer scope)
                 del embedder
-                if torch.backends.mps.is_available():
-                    torch.mps.empty_cache()
                 gc.collect()
 
             # Update text index

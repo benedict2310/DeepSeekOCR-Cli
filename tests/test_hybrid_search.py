@@ -259,6 +259,37 @@ class TestHybridSearch:
         assert len(results) <= 3
         assert all(isinstance(r, tuple) and len(r) == 2 for r in results)
 
+    def test_hybrid_search_small_index(self):
+        """Test hybrid search with index smaller than k*2."""
+        # Create a tiny text index with only 3 documents
+        n_docs = 3
+        dim = 384
+        X = np.random.randn(n_docs, dim).astype(np.float32)
+        X = X / np.linalg.norm(X, axis=1, keepdims=True)
+
+        docs = [{"path": f"/docs/{i}.md", "name": f"doc_{i}"} for i in range(n_docs)]
+
+        tindex = TextIndex(space="cosine")
+        tindex.build(X, docs)
+
+        # Load sentence transformer for query encoding
+        st = load_st_model("sentence-transformers/all-MiniLM-L6-v2")
+
+        # This should not raise RuntimeError even though k=5 and k*2=10 > n_docs=3
+        results = hybrid_search(
+            query="test query",
+            text_index=tindex,
+            visual_index=None,
+            query_image=None,
+            text_model=st,
+            alpha=1.0,
+            k=5,  # Requesting more than available
+        )
+
+        # Should return all available documents (3), not raise an error
+        assert len(results) <= 3
+        assert all(isinstance(r, tuple) and len(r) == 2 for r in results)
+
 
 class TestVisualEmbedding:
     """Test visual embedding extraction (requires model download)."""
@@ -278,6 +309,35 @@ class TestVisualEmbedding:
             assert vec.shape[0] > 0  # Should have some dimensions
             assert vec.dtype == np.float32
             assert np.allclose(np.linalg.norm(vec), 1.0, atol=1e-5)  # Normalized
+
+        except Exception as e:
+            pytest.skip(f"Model not available: {e}")
+
+    @pytest.mark.slow
+    def test_embedder_model_reuse(self):
+        """Test that embedder can reuse an existing model instance."""
+        # This test requires the DeepSeek-OCR model to be available
+        try:
+            import torch
+            from transformers import AutoModel, AutoTokenizer
+
+            # Load model and tokenizer once
+            model = AutoModel.from_pretrained(
+                "deepseek-ai/DeepSeek-OCR",
+                trust_remote_code=True,
+                attn_implementation="eager",
+                torch_dtype=torch.float32,
+            )
+            tok = AutoTokenizer.from_pretrained(
+                "deepseek-ai/DeepSeek-OCR", trust_remote_code=True
+            )
+
+            # Create embedder with pre-loaded model (should not reload)
+            embedder = DeepSeekVisionEmbedder(model=model, tokenizer=tok)
+
+            # Verify it uses the same model instance
+            assert embedder.model is model
+            assert embedder.tok is tok
 
         except Exception as e:
             pytest.skip(f"Model not available: {e}")

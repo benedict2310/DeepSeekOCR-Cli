@@ -151,7 +151,9 @@ def hybrid_search(
     # Text search
     if query and text_model:
         qv = text_model.encode([query], normalize_embeddings=True)[0].astype(np.float32)
-        text_results = text_index.query(qv, k=k * 2)  # Get more for fusion
+        # Guard against small indexes: clamp k*2 to actual index size
+        text_k = min(k * 2, len(text_index.docs)) if text_index.docs else k
+        text_results = text_index.query(qv, k=text_k)
         for doc, score in text_results:
             key = doc.get("name", doc.get("path", "unknown"))
             results[key] = {"doc": doc, "text_score": score, "visual_score": 0.0}
@@ -162,7 +164,9 @@ def hybrid_search(
 
         embedder = DeepSeekVisionEmbedder()
         qv = embedder.embed_image(query_image)
-        visual_results = visual_index.query(qv, topk=k * 2)
+        # Guard against small indexes: clamp k*2 to actual index size
+        visual_k = min(k * 2, len(visual_index.meta)) if visual_index.meta else k
+        visual_results = visual_index.query(qv, topk=visual_k)
         for meta, score in visual_results:
             key = meta.get("display", "unknown")
             if key in results:

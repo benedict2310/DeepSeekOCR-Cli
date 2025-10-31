@@ -14,27 +14,47 @@ from transformers import AutoModel, AutoProcessor, AutoTokenizer
 class DeepSeekVisionEmbedder:
     """Extracts vision embeddings from DeepSeek-OCR model."""
 
-    def __init__(self, model_id="deepseek-ai/DeepSeek-OCR", device=None, dtype=torch.float32):
+    def __init__(
+        self,
+        model_id="deepseek-ai/DeepSeek-OCR",
+        device=None,
+        dtype=torch.float32,
+        model=None,
+        tokenizer=None,
+    ):
         """
         Initialize the vision embedder.
 
         Args:
-            model_id: HuggingFace model identifier
+            model_id: HuggingFace model identifier (used if model is None)
             device: Device to use (mps, cuda, or cpu)
-            dtype: Data type for model weights
+            dtype: Data type for model weights (only used when loading new model)
+            model: Pre-loaded model instance (optional, for reuse)
+            tokenizer: Pre-loaded tokenizer instance (optional, for reuse)
         """
         self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
-        self.tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-        try:
-            self.proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-        except Exception:
-            self.proc = None
-        self.model = AutoModel.from_pretrained(
-            model_id,
-            trust_remote_code=True,
-            attn_implementation="eager",
-            torch_dtype=dtype,
-        ).to(self.device).eval()
+
+        # Reuse existing model and tokenizer if provided
+        if model is not None and tokenizer is not None:
+            self.model = model
+            self.tok = tokenizer
+            try:
+                self.proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+            except Exception:
+                self.proc = None
+        else:
+            # Load new model and tokenizer
+            self.tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+            try:
+                self.proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
+            except Exception:
+                self.proc = None
+            self.model = AutoModel.from_pretrained(
+                model_id,
+                trust_remote_code=True,
+                attn_implementation="eager",
+                torch_dtype=dtype,
+            ).to(self.device).eval()
 
     def _preprocess(self, pil_image):
         """
