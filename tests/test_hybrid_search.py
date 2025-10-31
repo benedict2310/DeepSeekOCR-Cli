@@ -1,5 +1,11 @@
 """
 Unit and integration tests for hybrid search functionality.
+
+Note on test markers:
+- Tests marked with @pytest.mark.slow require downloading large models from HuggingFace
+- Run fast tests only: pytest tests/test_hybrid_search.py -m "not slow"
+- Run all tests including slow ones: pytest tests/test_hybrid_search.py
+- Run only slow tests: pytest tests/test_hybrid_search.py -m "slow"
 """
 
 import sys
@@ -205,13 +211,15 @@ class TestTextIndex:
 class TestSentenceTransformer:
     """Test sentence transformer model loading and encoding."""
 
+    @pytest.mark.slow
     def test_load_st_model(self):
-        """Test loading sentence transformer model."""
+        """Test loading sentence transformer model (requires download)."""
         model = load_st_model("sentence-transformers/all-MiniLM-L6-v2")
         assert model is not None
 
+    @pytest.mark.slow
     def test_encode_text(self):
-        """Test encoding text with sentence transformer."""
+        """Test encoding text with sentence transformer (requires download)."""
         model = load_st_model("sentence-transformers/all-MiniLM-L6-v2")
 
         texts = ["This is a test sentence.", "Another example text."]
@@ -225,8 +233,9 @@ class TestSentenceTransformer:
 class TestHybridSearch:
     """Test hybrid search functionality."""
 
+    @pytest.mark.slow
     def test_hybrid_search_text_only(self):
-        """Test hybrid search with text only."""
+        """Test hybrid search with text only (requires model download)."""
         # Create a simple text index
         n_docs = 5
         dim = 384
@@ -258,8 +267,9 @@ class TestHybridSearch:
         assert len(results) <= 3
         assert all(isinstance(r, tuple) and len(r) == 2 for r in results)
 
+    @pytest.mark.slow
     def test_hybrid_search_small_index(self):
-        """Test hybrid search with index smaller than k*2."""
+        """Test hybrid search with index smaller than k*2 (requires model download)."""
         # Create a tiny text index with only 3 documents
         n_docs = 3
         dim = 384

@@ -174,26 +174,44 @@ def home():
                 const container = document.getElementById(containerId);
 
                 if (results.length === 0) {{
-                    container.innerHTML = '<p>No results found.</p>';
+                    container.textContent = 'No results found.';
                     return;
                 }}
 
-                let html = '<div class="results">';
+                // Create results container
+                const resultsDiv = document.createElement('div');
+                resultsDiv.className = 'results';
+
                 results.forEach((item, idx) => {{
                     const score = (item.score * 100).toFixed(1);
                     const name = type === 'text' ? item.name : item.display;
-                    const path = type === 'text' ? `<br><small>${{item.path}}</small>` : '';
+                    const path = type === 'text' ? item.path : '';
 
-                    html += `
-                        <div class="result-item">
-                            <strong>${{idx + 1}}. ${{name}}</strong> (Score: ${{score}}%)
-                            ${{path}}
-                        </div>
-                    `;
+                    // Create result item using DOM methods to prevent XSS
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'result-item';
+
+                    const strong = document.createElement('strong');
+                    strong.textContent = `${{idx + 1}}. ${{name}}`;
+                    resultItem.appendChild(strong);
+
+                    const scoreSpan = document.createTextNode(` (Score: ${{score}}%)`);
+                    resultItem.appendChild(scoreSpan);
+
+                    if (path) {{
+                        const br = document.createElement('br');
+                        resultItem.appendChild(br);
+                        const small = document.createElement('small');
+                        small.textContent = path;
+                        resultItem.appendChild(small);
+                    }}
+
+                    resultsDiv.appendChild(resultItem);
                 }});
-                html += '</div>';
 
-                container.innerHTML = html;
+                // Clear and replace container contents safely
+                container.textContent = '';
+                container.appendChild(resultsDiv);
             }}
         </script>
     </head>
