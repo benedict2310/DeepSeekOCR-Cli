@@ -128,8 +128,7 @@ class TestTextIndex:
 
         # Create document metadata
         docs = [
-            {"path": f"/docs/doc_{i}.md", "name": f"doc_{i}", "page_no": 1}
-            for i in range(n_docs)
+            {"path": f"/docs/doc_{i}.md", "name": f"doc_{i}", "page_no": 1} for i in range(n_docs)
         ]
 
         # Build index
@@ -328,9 +327,7 @@ class TestVisualEmbedding:
                 attn_implementation="eager",
                 torch_dtype=torch.float32,
             )
-            tok = AutoTokenizer.from_pretrained(
-                "deepseek-ai/DeepSeek-OCR", trust_remote_code=True
-            )
+            tok = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-OCR", trust_remote_code=True)
 
             # Create embedder with pre-loaded model (should not reload)
             embedder = DeepSeekVisionEmbedder(model=model, tokenizer=tok)

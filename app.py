@@ -249,10 +249,7 @@ def search_text(q: str = Form(...), topk: int = Form(5)):
         JSON array of search results
     """
     if tidx is None or st is None:
-        return JSONResponse(
-            {"error": "Text index not available"},
-            status_code=503
-        )
+        return JSONResponse({"error": "Text index not available"}, status_code=503)
 
     try:
         qv = st.encode([q], normalize_embeddings=True)[0].astype(np.float32)
@@ -261,10 +258,7 @@ def search_text(q: str = Form(...), topk: int = Form(5)):
             [{"name": d["name"], "path": d.get("path", ""), "score": s} for d, s in res]
         )
     except Exception as e:
-        return JSONResponse(
-            {"error": str(e)},
-            status_code=500
-        )
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.post("/search_image")
@@ -280,23 +274,15 @@ async def search_image(file: UploadFile = File(...), topk: int = Form(5)):
         JSON array of search results
     """
     if vi is None or embedder is None:
-        return JSONResponse(
-            {"error": "Visual index not available"},
-            status_code=503
-        )
+        return JSONResponse({"error": "Visual index not available"}, status_code=503)
 
     try:
         img = Image.open(io.BytesIO(await file.read())).convert("RGB")
         qv = embedder.embed_image(img)
         res = vi.query(qv, topk=topk)
-        return JSONResponse(
-            [{"display": m["display"], "score": s} for m, s in res]
-        )
+        return JSONResponse([{"display": m["display"], "score": s} for m, s in res])
     except Exception as e:
-        return JSONResponse(
-            {"error": str(e)},
-            status_code=500
-        )
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @app.get("/health")

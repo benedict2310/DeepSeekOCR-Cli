@@ -49,12 +49,16 @@ class DeepSeekVisionEmbedder:
                 self.proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
             except Exception:
                 self.proc = None
-            self.model = AutoModel.from_pretrained(
-                model_id,
-                trust_remote_code=True,
-                attn_implementation="eager",
-                torch_dtype=dtype,
-            ).to(self.device).eval()
+            self.model = (
+                AutoModel.from_pretrained(
+                    model_id,
+                    trust_remote_code=True,
+                    attn_implementation="eager",
+                    torch_dtype=dtype,
+                )
+                .to(self.device)
+                .eval()
+            )
 
     def _preprocess(self, pil_image):
         """

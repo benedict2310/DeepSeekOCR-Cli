@@ -632,7 +632,9 @@ Examples:
 
     # Hybrid search / indexing arguments
     ap.add_argument(
-        "--update-index", action="store_true", help="Update visual (and optional text) index after OCR"
+        "--update-index",
+        action="store_true",
+        help="Update visual (and optional text) index after OCR",
     )
     ap.add_argument(
         "--visual-index", default=None, help="Folder for visual HNSW index (created if missing)"
@@ -643,10 +645,13 @@ Examples:
     ap.add_argument(
         "--text-embed-model",
         default="sentence-transformers/all-MiniLM-L6-v2",
-        help="Text embedding model for text index (default: all-MiniLM-L6-v2)"
+        help="Text embedding model for text index (default: all-MiniLM-L6-v2)",
     )
     ap.add_argument(
-        "--index-batch", type=int, default=128, help="Batch size when appending to indexes (default: 128)"
+        "--index-batch",
+        type=int,
+        default=128,
+        help="Batch size when appending to indexes (default: 128)",
     )
 
     args = ap.parse_args()
