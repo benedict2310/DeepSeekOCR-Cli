@@ -9,7 +9,7 @@ import hnswlib
 import numpy as np
 import torch
 from filelock import FileLock
-from transformers import AutoModel, AutoProcessor, AutoTokenizer
+from transformers import AutoModel, AutoTokenizer
 
 
 class DeepSeekVisionEmbedder:
@@ -92,11 +92,13 @@ class DeepSeekVisionEmbedder:
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError:
-            raise RuntimeError("sentence-transformers required for visual embeddings. Install with: pip install sentence-transformers")
+            raise RuntimeError(
+                "sentence-transformers required for visual embeddings. Install with: pip install sentence-transformers"
+            ) from None
 
         # Use CLIP for vision embeddings (more reliable than custom DeepSeek vision model)
-        if not hasattr(self, '_clip_model'):
-            self._clip_model = SentenceTransformer('clip-ViT-B-32')
+        if not hasattr(self, "_clip_model"):
+            self._clip_model = SentenceTransformer("clip-ViT-B-32")
 
         # Convert PIL image to CLIP embedding
         embedding = self._clip_model.encode(pil_image, convert_to_numpy=True)
