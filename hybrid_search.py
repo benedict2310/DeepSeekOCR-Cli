@@ -7,6 +7,7 @@ from pathlib import Path
 
 import hnswlib
 import numpy as np
+from filelock import FileLock
 
 
 def load_st_model(name="sentence-transformers/all-MiniLM-L6-v2"):
@@ -81,30 +82,36 @@ class TextIndex:
 
     def save(self, folder: Path):
         """
-        Save index and metadata to disk.
+        Save index and metadata to disk with file locking.
 
         Args:
             folder: Directory to save index files
         """
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / "dim.txt").write_text(str(self.dim), encoding="utf-8")
-        self.index.save_index(str(folder / "hnsw.bin"))
-        (folder / "docs.json").write_text(
-            json.dumps(self.docs, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        lock_file = folder / ".index.lock"
+
+        with FileLock(str(lock_file), timeout=60):
+            (folder / "dim.txt").write_text(str(self.dim), encoding="utf-8")
+            self.index.save_index(str(folder / "hnsw.bin"))
+            (folder / "docs.json").write_text(
+                json.dumps(self.docs, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
     def load(self, folder: Path):
         """
-        Load index and metadata from disk.
+        Load index and metadata from disk with file locking.
 
         Args:
             folder: Directory containing index files
         """
-        self.dim = int((folder / "dim.txt").read_text().strip())
-        self.index = hnswlib.Index(space=self.space, dim=self.dim)
-        self.index.load_index(str(folder / "hnsw.bin"))
-        self.index.set_ef(64)
-        self.docs = json.loads((folder / "docs.json").read_text(encoding="utf-8"))
+        lock_file = folder / ".index.lock"
+
+        with FileLock(str(lock_file), timeout=60):
+            self.dim = int((folder / "dim.txt").read_text().strip())
+            self.index = hnswlib.Index(space=self.space, dim=self.dim)
+            self.index.load_index(str(folder / "hnsw.bin"))
+            self.index.set_ef(64)
+            self.docs = json.loads((folder / "docs.json").read_text(encoding="utf-8"))
 
     def query(self, vec: np.ndarray, k=5):
         """

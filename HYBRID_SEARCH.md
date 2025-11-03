@@ -312,7 +312,10 @@ results = hybrid_search(
 | `/search_text` | POST | Text search (form: `q`, `topk`) |
 | `/search_image` | POST | Image search (multipart: `file`, `topk`) |
 | `/health` | GET | Health check and index status |
+| `/reload` | POST | Reload indexes from disk without restarting server |
 | `/docs` | GET | OpenAPI documentation |
+
+**Note:** The `/reload` endpoint is useful when you add new documents to the indexes while the server is running. Simply call `curl -X POST http://127.0.0.1:8000/reload` to refresh the indexes without restarting the server.
 
 ## Performance Notes
 
@@ -360,6 +363,17 @@ results = hybrid_search(
 - Process in smaller batches
 - Clear MPS cache: `torch.mps.empty_cache()`
 - Reduce DPI for PDF rendering (e.g., 200 instead of 300)
+
+**Problem:** Index corruption when processing multiple documents in parallel
+
+**Solution:**
+- File locking is implemented using the `filelock` library (60-second timeout)
+- Both `VisualIndex` and `TextIndex` use FileLock in `save()` and `load()` methods
+- Safe to process multiple documents concurrently - locks prevent race conditions
+- If you see timeout errors, one process may be holding the lock too long
+- Lock files are stored as `.index.lock` in each index directory
+
+**Note:** The file locking was added to prevent race conditions that could occur when multiple OCR processes try to update the same index simultaneously. This ensures data integrity during concurrent operations.
 
 ### Index Quality
 

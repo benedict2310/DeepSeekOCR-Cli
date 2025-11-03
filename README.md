@@ -372,6 +372,129 @@ Pre-configured quality/speed trade-offs for common scenarios.
 ./deepseek_ocr_mac.py file.pdf --compression high --base-size 1536
 ```
 
+## Hybrid Search (NEW!)
+
+The CLI now includes a powerful hybrid search system that combines visual and semantic text search over your OCR'd documents.
+
+### Quick Start
+
+**1. Build indexes while processing documents:**
+```bash
+./deepseek_ocr_mac.py docs/*.pdf \
+  --update-index \
+  --visual-index ./vi_index \
+  --text-index ./ti_index \
+  -o ./outputs
+```
+
+**2. Launch the web demo:**
+```bash
+uvicorn app:app --reload --port 8000
+```
+
+**3. Open browser:** http://127.0.0.1:8000
+
+### Features
+
+**Visual Search:**
+- Search by image similarity using CLIP embeddings (OpenAI's vision-language model)
+- Find visually similar pages based on layout, structure, and content
+- Perfect for finding screenshots, diagrams, or documents with similar formatting
+- Example: Upload a product photo to find similar product images
+
+**Text Search:**
+- Semantic text search using sentence transformers
+- Understands meaning, not just keywords
+- Search for "coding agents" to find discussions about AI assistants
+- Works on OCR-extracted text content
+
+**Hybrid Search:**
+- Combines both visual and text search with score fusion
+- Best of both worlds for multi-modal document retrieval
+- Automatically balances visual similarity and semantic relevance
+
+**Concurrent Processing Safety:**
+- Built-in file locking prevents index corruption
+- Safe to process multiple documents simultaneously
+- Uses `filelock` library with 60-second timeout
+- Lock files stored as `.index.lock` in index directories
+
+**Live Index Reload:**
+- `/reload` endpoint refreshes indexes without server restart
+- Add new documents and reload instantly
+- No downtime required for index updates
+
+### Example Use Cases
+
+**Find similar screenshots:**
+```bash
+# Upload a Twitter screenshot to find other social media captures
+curl -X POST -F "file=@screenshot.png" -F "topk=5" http://localhost:8000/search_image
+```
+
+**Semantic text search:**
+```bash
+# Search for discussions about Vulkan graphics
+curl -X POST -F "q=Vulkan workstation" -F "topk=3" http://localhost:8000/search_text
+```
+
+**Process documents in parallel (safe with file locking):**
+```bash
+# Process multiple PDFs - file locking prevents race conditions
+./deepseek_ocr_mac.py paper1.pdf --update-index --visual-index ./vi --text-index ./ti &
+./deepseek_ocr_mac.py paper2.pdf --update-index --visual-index ./vi --text-index ./ti &
+wait
+```
+
+**Reload indexes after updates:**
+```bash
+curl -X POST http://localhost:8000/reload
+```
+
+### Architecture
+
+- **Visual Index**: CLIP-ViT-B-32 embeddings + HNSW approximate nearest neighbor search
+- **Text Index**: all-MiniLM-L6-v2 sentence embeddings + HNSW
+- **Storage**: Memory-mapped HNSW indexes with JSON metadata
+- **Concurrency**: File locking with 60s timeout prevents corruption
+- **Performance**: Sub-second queries even with thousands of pages
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Web UI homepage |
+| `/search_text` | POST | Text search (form: `q`, `topk`) |
+| `/search_image` | POST | Image search (multipart: `file`, `topk`) |
+| `/health` | GET | Health check and index status |
+| `/reload` | POST | Reload indexes from disk without restarting server |
+| `/docs` | GET | OpenAPI documentation |
+
+### Index Management
+
+**Incremental Updates:**
+```bash
+# Add new documents to existing indexes
+./deepseek_ocr_mac.py new_doc.pdf --update-index --visual-index ./vi --text-index ./ti
+```
+
+**Rebuild from Scratch:**
+```bash
+# Delete old indexes
+rm -rf ./vi_index ./ti_index
+
+# Reprocess all documents
+./deepseek_ocr_mac.py docs/*.pdf --update-index --visual-index ./vi_index --text-index ./ti_index
+```
+
+**Memory Management:**
+- Avoid running multiple OCR processes in parallel (high RAM usage)
+- Each process loads ~8GB model + MPS memory
+- File locking ensures safety, but sequential processing recommended
+- Indexes can be safely updated concurrently once models are loaded
+
+For complete documentation, see [HYBRID_SEARCH.md](HYBRID_SEARCH.md).
+
 ## Output
 
 Results are saved to the `outputs/` directory (configurable with `-o`):

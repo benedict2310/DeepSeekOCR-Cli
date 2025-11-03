@@ -12,8 +12,8 @@ from hybrid_search import TextIndex, load_st_model
 from visual_index import DeepSeekVisionEmbedder, VisualIndex
 
 # Configuration
-VI_DIR = Path("./vi_index")
-TI_DIR = Path("./ti_index")
+VI_DIR = Path("./demo_vi_index")
+TI_DIR = Path("./demo_ti_index")
 
 # Initialize app
 app = FastAPI(title="DeepSeek-OCR Hybrid Search", version="1.0.0")
@@ -317,6 +317,21 @@ def health():
         "visual_entries": len(vi.meta) if vi else 0,
         "text_entries": len(tidx.docs) if tidx else 0,
     }
+
+
+@app.post("/reload")
+def reload_indexes():
+    """Reload indexes from disk without restarting the server."""
+    try:
+        initialize_indexes()
+        return {
+            "status": "success",
+            "message": "Indexes reloaded",
+            "visual_entries": len(vi.meta) if vi else 0,
+            "text_entries": len(tidx.docs) if tidx else 0,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":

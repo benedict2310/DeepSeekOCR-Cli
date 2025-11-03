@@ -8,6 +8,7 @@ from pathlib import Path
 import hnswlib
 import numpy as np
 import torch
+from filelock import FileLock
 from transformers import AutoModel, AutoProcessor, AutoTokenizer
 
 
@@ -38,17 +39,13 @@ class DeepSeekVisionEmbedder:
         if model is not None and tokenizer is not None:
             self.model = model
             self.tok = tokenizer
-            try:
-                self.proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-            except Exception:
-                self.proc = None
+            # DeepSeek-OCR doesn't have a true multimodal processor, skip it
+            self.proc = None
         else:
             # Load new model and tokenizer
             self.tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-            try:
-                self.proc = AutoProcessor.from_pretrained(model_id, trust_remote_code=True)
-            except Exception:
-                self.proc = None
+            # DeepSeek-OCR doesn't have a true multimodal processor, skip it
+            self.proc = None
             self.model = (
                 AutoModel.from_pretrained(
                     model_id,
@@ -70,14 +67,6 @@ class DeepSeekVisionEmbedder:
         Returns:
             Dictionary with preprocessed inputs
         """
-        if self.proc:
-            inputs = self.proc(text="<image>\n", images=pil_image, return_tensors="pt")
-            for k, v in list(inputs.items()):
-                if isinstance(v, torch.Tensor):
-                    inputs[k] = v.to(self.device)
-            return inputs
-
-        # Simple fallback without processor
         import numpy as np
 
         img = pil_image.convert("RGB")
@@ -98,42 +87,20 @@ class DeepSeekVisionEmbedder:
         Returns:
             Normalized embedding vector as numpy array
         """
-        x = self._preprocess(pil_image)
-        with torch.no_grad():
-            if hasattr(self.model, "get_image_features"):
-                feats = self.model.get_image_features(
-                    **{k: v for k, v in x.items() if k in ("images", "pixel_values")}
-                )
-                vec = feats if isinstance(feats, torch.Tensor) else feats[0]
-                if vec.ndim == 3:
-                    vec = vec.mean(1)
-            else:
-                out = self.model(**x, output_hidden_states=True, return_dict=True)
-                # Try vision_outputs first
-                if hasattr(out, "vision_outputs") and out.vision_outputs is not None:
-                    hs = out.vision_outputs.last_hidden_state  # [B,T,D]
-                    vec = hs.mean(1)
-                elif hasattr(out, "hidden_states") and out.hidden_states is not None:
-                    hs = out.hidden_states[-1][0]  # [seq,D] mixed stream
-                    mask = x.get("images_seq_mask", None)  # if provided by processor
-                    if isinstance(mask, torch.Tensor) and mask.numel():
-                        vs = hs[mask[0].to(torch.bool)]
-                        vec = vs.mean(0) if vs.numel() else hs.mean(0)
-                    else:
-                        vec = hs.mean(0)
-                else:
-                    vision = getattr(self.model, "vision", None) or getattr(
-                        self.model, "vision_model", None
-                    )
-                    pv = x.get("images") or x.get("pixel_values")
-                    vout = vision(pixel_values=pv)
-                    hs = getattr(vout, "last_hidden_state", None)
-                    if hs is None:
-                        raise RuntimeError("No vision last_hidden_state")
-                    vec = hs.mean(1)
+        # DeepSeek-OCR has a very custom vision architecture that's difficult to extract embeddings from.
+        # Instead, use CLIP from sentence-transformers for reliable visual embeddings.
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError:
+            raise RuntimeError("sentence-transformers required for visual embeddings. Install with: pip install sentence-transformers")
 
-            vec = torch.nn.functional.normalize(vec, dim=-1)
-            return vec.squeeze().detach().cpu().numpy().astype(np.float32)
+        # Use CLIP for vision embeddings (more reliable than custom DeepSeek vision model)
+        if not hasattr(self, '_clip_model'):
+            self._clip_model = SentenceTransformer('clip-ViT-B-32')
+
+        # Convert PIL image to CLIP embedding
+        embedding = self._clip_model.encode(pil_image, convert_to_numpy=True)
+        return embedding.astype(np.float32)
 
 
 class VisualIndex:
@@ -193,30 +160,36 @@ class VisualIndex:
 
     def save(self, folder: Path):
         """
-        Save index and metadata to disk.
+        Save index and metadata to disk with file locking.
 
         Args:
             folder: Directory to save index files
         """
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / "dim.txt").write_text(str(self.dim), encoding="utf-8")
-        self.index.save_index(str(folder / "hnsw.bin"))
-        (folder / "meta.json").write_text(
-            json.dumps(self.meta, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        lock_file = folder / ".index.lock"
+
+        with FileLock(str(lock_file), timeout=60):
+            (folder / "dim.txt").write_text(str(self.dim), encoding="utf-8")
+            self.index.save_index(str(folder / "hnsw.bin"))
+            (folder / "meta.json").write_text(
+                json.dumps(self.meta, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
 
     def load(self, folder: Path):
         """
-        Load index and metadata from disk.
+        Load index and metadata from disk with file locking.
 
         Args:
             folder: Directory containing index files
         """
-        self.dim = int((folder / "dim.txt").read_text().strip())
-        self.index = hnswlib.Index(space=self.space, dim=self.dim)
-        self.index.load_index(str(folder / "hnsw.bin"))
-        self.index.set_ef(64)
-        self.meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+        lock_file = folder / ".index.lock"
+
+        with FileLock(str(lock_file), timeout=60):
+            self.dim = int((folder / "dim.txt").read_text().strip())
+            self.index = hnswlib.Index(space=self.space, dim=self.dim)
+            self.index.load_index(str(folder / "hnsw.bin"))
+            self.index.set_ef(64)
+            self.meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
 
     def query(self, vec: np.ndarray, topk=5):
         """
