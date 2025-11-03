@@ -776,7 +776,17 @@ Examples:
 
                 # Store page record for indexing
                 if args.update_index and pil_image is not None:
-                    display_name = f"{target.name}#p{idx:04d}" if target.is_file() else f.name
+                    # Use unique display name to avoid collisions when processing multiple files
+                    if target.is_file():
+                        display_name = f"{target.name}#p{idx:04d}"
+                    else:
+                        # For directories, use relative path from target to ensure uniqueness
+                        try:
+                            rel_path = f.relative_to(target)
+                            display_name = str(rel_path).replace("/", "_")
+                        except ValueError:
+                            # Fallback to absolute-based name if relative_to fails
+                            display_name = f"{f.parent.name}_{f.name}"
                     page_records.append((pil_image, text, display_name))
 
                 if args.strict and words < args.min_words:
