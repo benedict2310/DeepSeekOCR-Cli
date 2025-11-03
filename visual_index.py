@@ -9,7 +9,6 @@ import hnswlib
 import numpy as np
 import torch
 from filelock import FileLock
-from transformers import AutoModel, AutoTokenizer
 
 
 class DeepSeekVisionEmbedder:
@@ -26,36 +25,31 @@ class DeepSeekVisionEmbedder:
         """
         Initialize the vision embedder.
 
+        NOTE: Since CLIP is now used for embeddings (not DeepSeek vision encoder),
+        the model and tokenizer are only loaded if explicitly provided.
+        For new instances, CLIP is lazily loaded in embed_image() instead.
+
         Args:
-            model_id: HuggingFace model identifier (used if model is None)
+            model_id: HuggingFace model identifier (used if model is None) [DEPRECATED]
             device: Device to use (mps, cuda, or cpu)
             dtype: Data type for model weights (only used when loading new model)
-            model: Pre-loaded model instance (optional, for reuse)
-            tokenizer: Pre-loaded tokenizer instance (optional, for reuse)
+            model: Pre-loaded model instance (optional, for reuse with legacy code)
+            tokenizer: Pre-loaded tokenizer instance (optional, for reuse with legacy code)
         """
         self.device = device or ("mps" if torch.backends.mps.is_available() else "cpu")
+        self.model_id = model_id
+        self.dtype = dtype
 
-        # Reuse existing model and tokenizer if provided
+        # Only load DeepSeek model if explicitly provided (for backward compatibility)
         if model is not None and tokenizer is not None:
             self.model = model
             self.tok = tokenizer
-            # DeepSeek-OCR doesn't have a true multimodal processor, skip it
             self.proc = None
         else:
-            # Load new model and tokenizer
-            self.tok = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
-            # DeepSeek-OCR doesn't have a true multimodal processor, skip it
+            # Don't load DeepSeek model - CLIP will be loaded lazily in embed_image()
+            self.model = None
+            self.tok = None
             self.proc = None
-            self.model = (
-                AutoModel.from_pretrained(
-                    model_id,
-                    trust_remote_code=True,
-                    attn_implementation="eager",
-                    torch_dtype=dtype,
-                )
-                .to(self.device)
-                .eval()
-            )
 
     def _preprocess(self, pil_image):
         """
@@ -100,8 +94,10 @@ class DeepSeekVisionEmbedder:
         if not hasattr(self, "_clip_model"):
             self._clip_model = SentenceTransformer("clip-ViT-B-32")
 
-        # Convert PIL image to CLIP embedding
-        embedding = self._clip_model.encode(pil_image, convert_to_numpy=True)
+        # Convert PIL image to CLIP embedding (normalized for cosine similarity)
+        embedding = self._clip_model.encode(
+            pil_image, convert_to_numpy=True, normalize_embeddings=True
+        )
         return embedding.astype(np.float32)
 
 

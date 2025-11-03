@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+from filelock import FileLock
 from PIL import Image, ImageDraw, ImageFilter
 from transformers import AutoModel, AutoTokenizer
 
@@ -832,35 +833,41 @@ Examples:
             # Update visual index
             if args.visual_index:
                 vi_dir = Path(args.visual_index).resolve()
+                vi_dir.mkdir(parents=True, exist_ok=True)
+                lock_file = vi_dir / ".update.lock"
+
                 print(f"\n[index] Updating visual index in {vi_dir} ...")
-                # Reuse existing model and tokenizer to avoid OOM on Apple Silicon
-                embedder = DeepSeekVisionEmbedder(
-                    args.model, dtype=torch.float32, model=model, tokenizer=tok
-                )
 
-                # Build or load visual index
-                vindex = VisualIndex(space="cosine")
-                if (vi_dir / "hnsw.bin").exists():
-                    vindex.load(vi_dir)
-
-                # Embed pages
-                vecs, vmeta = [], []
-                for i, (img, _text, disp) in enumerate(page_records):
-                    vecs.append(embedder.embed_image(img))
-                    vmeta.append(
-                        {"id": (len(vindex.meta) + i if vindex.index else i), "display": disp}
+                # Acquire lock for entire load-modify-save sequence
+                with FileLock(str(lock_file), timeout=60):
+                    # Reuse existing model and tokenizer to avoid OOM on Apple Silicon
+                    embedder = DeepSeekVisionEmbedder(
+                        args.model, dtype=torch.float32, model=model, tokenizer=tok
                     )
 
-                X = np.stack(vecs).astype(np.float32)
+                    # Build or load visual index
+                    vindex = VisualIndex(space="cosine")
+                    if (vi_dir / "hnsw.bin").exists():
+                        vindex.load(vi_dir)
 
-                # Save/build/append
-                if vindex.index is None:
-                    vindex.build(X, vmeta)
-                else:
-                    vindex.resize(len(vindex.meta) + len(X))
-                    vindex.add(X, vmeta)
-                vindex.save(vi_dir)
-                print(f"[index] Visual index now has {len(vindex.meta)} entries")
+                    # Embed pages
+                    vecs, vmeta = [], []
+                    for i, (img, _text, disp) in enumerate(page_records):
+                        vecs.append(embedder.embed_image(img))
+                        vmeta.append(
+                            {"id": (len(vindex.meta) + i if vindex.index else i), "display": disp}
+                        )
+
+                    X = np.stack(vecs).astype(np.float32)
+
+                    # Save/build/append
+                    if vindex.index is None:
+                        vindex.build(X, vmeta)
+                    else:
+                        vindex.resize(len(vindex.meta) + len(X))
+                        vindex.add(X, vmeta)
+                    vindex.save(vi_dir)
+                    print(f"[index] Visual index now has {len(vindex.meta)} entries")
 
                 # Clean up embedder reference (model is still held by outer scope)
                 del embedder
@@ -869,26 +876,32 @@ Examples:
             # Update text index
             if args.text_index:
                 ti_dir = Path(args.text_index).resolve()
+                ti_dir.mkdir(parents=True, exist_ok=True)
+                lock_file = ti_dir / ".update.lock"
+
                 print(f"[index] Updating text index in {ti_dir} ...")
-                tindex = TextIndex(space="cosine")
-                if (ti_dir / "hnsw.bin").exists():
-                    tindex.load(ti_dir)
 
-                st = load_st_model(args.text_embed_model)
-                docs, X = [], []
-                for _img, txt, disp in page_records:
-                    emb = st.encode([txt], normalize_embeddings=True)[0].astype(np.float32)
-                    X.append(emb)
-                    docs.append({"path": str(merged_path.resolve()), "name": disp})
-                X = np.stack(X).astype(np.float32)
+                # Acquire lock for entire load-modify-save sequence
+                with FileLock(str(lock_file), timeout=60):
+                    tindex = TextIndex(space="cosine")
+                    if (ti_dir / "hnsw.bin").exists():
+                        tindex.load(ti_dir)
 
-                if tindex.index is None:
-                    tindex.build(X, docs)
-                else:
-                    tindex.resize(len(tindex.docs) + len(X))
-                    tindex.add(X, docs)
-                tindex.save(ti_dir)
-                print(f"[index] Text index now has {len(tindex.docs)} entries")
+                    st = load_st_model(args.text_embed_model)
+                    docs, X = [], []
+                    for _img, txt, disp in page_records:
+                        emb = st.encode([txt], normalize_embeddings=True)[0].astype(np.float32)
+                        X.append(emb)
+                        docs.append({"path": str(merged_path.resolve()), "name": disp})
+                    X = np.stack(X).astype(np.float32)
+
+                    if tindex.index is None:
+                        tindex.build(X, docs)
+                    else:
+                        tindex.resize(len(tindex.docs) + len(X))
+                        tindex.add(X, docs)
+                    tindex.save(ti_dir)
+                    print(f"[index] Text index now has {len(tindex.docs)} entries")
 
                 # Clean up
                 del st

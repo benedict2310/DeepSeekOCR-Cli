@@ -35,9 +35,9 @@ def initialize_indexes():
         vi.load(VI_DIR)
         print(f"✓ Loaded visual index with {len(vi.meta)} entries")
 
-        # Initialize embedder
-        embedder = DeepSeekVisionEmbedder("deepseek-ai/DeepSeek-OCR")
-        print("✓ Loaded DeepSeek vision embedder")
+        # Initialize embedder (lightweight - CLIP loaded lazily on first query)
+        embedder = DeepSeekVisionEmbedder()
+        print("✓ Loaded vision embedder (CLIP)")
     else:
         print(f"⚠️  Visual index not found at {VI_DIR}")
 
