@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Optional
 
 import torch
+from filelock import FileLock
 from PIL import Image, ImageDraw, ImageFilter
 from transformers import AutoModel, AutoTokenizer
 
@@ -25,6 +26,15 @@ try:
     import fitz  # PyMuPDF
 except Exception:
     fitz = None
+
+# Import hybrid search modules
+try:
+    from hybrid_search import TextIndex, load_st_model
+    from visual_index import DeepSeekVisionEmbedder, VisualIndex
+
+    HYBRID_SEARCH_AVAILABLE = True
+except ImportError:
+    HYBRID_SEARCH_AVAILABLE = False
 
 IMG_EXTS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 
@@ -621,7 +631,37 @@ Examples:
         "--min-words", type=int, default=20, help="Min words per page for --strict (default: 20)"
     )
 
+    # Hybrid search / indexing arguments
+    ap.add_argument(
+        "--update-index",
+        action="store_true",
+        help="Update visual (and optional text) index after OCR",
+    )
+    ap.add_argument(
+        "--visual-index", default=None, help="Folder for visual HNSW index (created if missing)"
+    )
+    ap.add_argument(
+        "--text-index", default=None, help="Folder for text HNSW index (created if missing)"
+    )
+    ap.add_argument(
+        "--text-embed-model",
+        default="sentence-transformers/all-MiniLM-L6-v2",
+        help="Text embedding model for text index (default: all-MiniLM-L6-v2)",
+    )
+    ap.add_argument(
+        "--index-batch",
+        type=int,
+        default=128,
+        help="Batch size when appending to indexes (default: 128)",
+    )
+
     args = ap.parse_args()
+
+    # Validate hybrid search dependencies
+    if args.update_index and not HYBRID_SEARCH_AVAILABLE:
+        print("ERROR: --update-index requires hnswlib and sentence-transformers.")
+        print("Install with: pip install hnswlib sentence-transformers")
+        sys.exit(1)
 
     # Apply compression presets (user-specified values override presets)
     preset = COMPRESSION_PRESETS[args.compression]
@@ -706,11 +746,17 @@ Examples:
 
         # Process each file (serial processing - parallel can be added later)
         page_md_sections = []
+        page_records = []  # Store (pil_image, page_text, display_name) for indexing
 
         for idx, f in enumerate(files, start=1):
             print(f"→ OCR [{idx}/{len(files)}] {f.name}")
 
             try:
+                # Load PIL image for potential indexing
+                pil_image = None
+                if args.update_index:
+                    pil_image = Image.open(f).convert("RGB")
+
                 # Run OCR
                 text = run_infer(
                     model,
@@ -727,6 +773,21 @@ Examples:
                 # Quality check
                 words = word_count(text)
                 stats.total_words += words
+
+                # Store page record for indexing
+                if args.update_index and pil_image is not None:
+                    # Use unique display name to avoid collisions when processing multiple files
+                    if target.is_file():
+                        display_name = f"{target.name}#p{idx:04d}"
+                    else:
+                        # For directories, use relative path from target to ensure uniqueness
+                        try:
+                            rel_path = f.relative_to(target)
+                            display_name = str(rel_path).replace("/", "_")
+                        except ValueError:
+                            # Fallback to absolute-based name if relative_to fails
+                            display_name = f"{f.parent.name}_{f.name}"
+                    page_records.append((pil_image, text, display_name))
 
                 if args.strict and words < args.min_words:
                     print(f"  ⚠️  FAILED: Only {words} words (minimum {args.min_words})")
@@ -774,6 +835,87 @@ Examples:
                 print(f"  ❌ Error processing page {idx}: {e}")
                 stats.failed_pages.append(idx)
                 page_md_sections.append(f"# Page {idx}\n\n*Error: {e}*\n")
+
+        # Update indexes if requested
+        if args.update_index and page_records:
+            import numpy as np
+
+            # Update visual index
+            if args.visual_index:
+                vi_dir = Path(args.visual_index).resolve()
+                vi_dir.mkdir(parents=True, exist_ok=True)
+                lock_file = vi_dir / ".update.lock"
+
+                print(f"\n[index] Updating visual index in {vi_dir} ...")
+
+                # Acquire lock for entire load-modify-save sequence
+                with FileLock(str(lock_file), timeout=60):
+                    # Reuse existing model and tokenizer to avoid OOM on Apple Silicon
+                    embedder = DeepSeekVisionEmbedder(
+                        args.model, dtype=torch.float32, model=model, tokenizer=tok
+                    )
+
+                    # Build or load visual index
+                    vindex = VisualIndex(space="cosine")
+                    if (vi_dir / "hnsw.bin").exists():
+                        vindex.load(vi_dir)
+
+                    # Embed pages
+                    vecs, vmeta = [], []
+                    for i, (img, _text, disp) in enumerate(page_records):
+                        vecs.append(embedder.embed_image(img))
+                        vmeta.append(
+                            {"id": (len(vindex.meta) + i if vindex.index else i), "display": disp}
+                        )
+
+                    X = np.stack(vecs).astype(np.float32)
+
+                    # Save/build/append
+                    if vindex.index is None:
+                        vindex.build(X, vmeta)
+                    else:
+                        vindex.resize(len(vindex.meta) + len(X))
+                        vindex.add(X, vmeta)
+                    vindex.save(vi_dir)
+                    print(f"[index] Visual index now has {len(vindex.meta)} entries")
+
+                # Clean up embedder reference (model is still held by outer scope)
+                del embedder
+                gc.collect()
+
+            # Update text index
+            if args.text_index:
+                ti_dir = Path(args.text_index).resolve()
+                ti_dir.mkdir(parents=True, exist_ok=True)
+                lock_file = ti_dir / ".update.lock"
+
+                print(f"[index] Updating text index in {ti_dir} ...")
+
+                # Acquire lock for entire load-modify-save sequence
+                with FileLock(str(lock_file), timeout=60):
+                    tindex = TextIndex(space="cosine")
+                    if (ti_dir / "hnsw.bin").exists():
+                        tindex.load(ti_dir)
+
+                    st = load_st_model(args.text_embed_model)
+                    docs, X = [], []
+                    for _img, txt, disp in page_records:
+                        emb = st.encode([txt], normalize_embeddings=True)[0].astype(np.float32)
+                        X.append(emb)
+                        docs.append({"path": str(merged_path.resolve()), "name": disp})
+                    X = np.stack(X).astype(np.float32)
+
+                    if tindex.index is None:
+                        tindex.build(X, docs)
+                    else:
+                        tindex.resize(len(tindex.docs) + len(X))
+                        tindex.add(X, docs)
+                    tindex.save(ti_dir)
+                    print(f"[index] Text index now has {len(tindex.docs)} entries")
+
+                # Clean up
+                del st
+                gc.collect()
 
         # Build quality summary
         stats.end_time = time.time()

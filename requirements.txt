@@ -23,3 +23,11 @@ PyMuPDF>=1.23.0
 # Utilities
 tqdm>=4.65.0
 matplotlib>=3.7.0
+
+# Hybrid search dependencies (optional)
+hnswlib>=0.7.0
+sentence-transformers>=3.0.0
+
+# Web API (optional)
+fastapi>=0.104.0
+uvicorn>=0.24.0
