@@ -95,9 +95,12 @@ class DeepSeekVisionEmbedder:
             self._clip_model = SentenceTransformer("clip-ViT-B-32")
 
         # Convert PIL image to CLIP embedding (normalized for cosine similarity)
+        # Note: encode() expects a list/sequence, so wrap single image in a list
         embedding = self._clip_model.encode(
-            pil_image, convert_to_numpy=True, normalize_embeddings=True
-        )
+            [pil_image], convert_to_numpy=True, normalize_embeddings=True
+        )[
+            0
+        ]  # Take first (and only) embedding
         return embedding.astype(np.float32)
 
 
